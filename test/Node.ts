@@ -1,56 +1,51 @@
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { ethers } from "hardhat";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { expect } from "chai";
 
 describe("RootNode and ChildNode", function () {
-    let rootNode: { address: any; addChild: (arg0: any) => any; findNode: (arg0: any) => any; }, childNode1: { address: any; addChild: (arg0: any) => any; }, childNode2: { address: any; }, addr1, addr2;
-
-    beforeEach(async function () {
-        [addr1, addr2] = await ethers.getSigners();
-        console.log("addr1", addr1.address);
-        console.log("addr2", addr2.address);
+    async function deployFixture() {
+        const [addr1, addr2] = await ethers.getSigners();
+        
         // Deploy RootNode
         const RootNode = await ethers.getContractFactory("RootNode");
-        rootNode = await RootNode.deploy("Root Attribute 1", "Root Attribute 2");
-        await rootNode.deployed();
-        console.log("rootNode.attr1", rootNode.attr1);
-        console.log("rootNode.attr2", rootNode.attr2);
-        console.log("rootNode", rootNode);
-
+        const rootNode = await RootNode.deploy("Root Attribute 1", "Root Attribute 2");
+        await rootNode.waitForDeployment();
+        console.log("Created rootNode", rootNode.target);
 
         // Deploy ChildNodes
         const ChildNode = await ethers.getContractFactory("ChildNode");
-        childNode1 = await ChildNode.deploy(rootNode.address, ["Child 1 Attr"]);
-        childNode2 = await ChildNode.deploy(rootNode.address, ["Child 2 Attr"]);
-        console.log(childNode1.address);
-        console.log(childNode2.address);
+        const childNode1 = await ChildNode.deploy(rootNode, ["Child 1 Attr"]);
+        await childNode1.waitForDeployment();
+        const childNode2 = await ChildNode.deploy(rootNode, ["Child 2 Attr"]);
+        await childNode2.waitForDeployment();
+
+        console.log("Created childNode1", childNode1.target);
+        console.log("Created childNode2", childNode2.target);
+
         // Add ChildNodes to RootNode
-        await rootNode.addChild(childNode1.address);
-        await rootNode.addChild(childNode2.address);
-        console.log(rootNode.childCount);
-    });
+        await rootNode.addChild(childNode1);
+        await rootNode.addChild(childNode2);
+        console.log("count", await rootNode.childCount());
+
+        return { rootNode, childNode1, childNode2, addr1, addr2 };
+    }
 
     it("should find a direct child node", async function () {
-        const found = await rootNode.findNode(childNode1.address);
+        const { rootNode, childNode1 } = await loadFixture(deployFixture);
+        const found = await rootNode.findNode(childNode1);
         expect(found).to.be.true;
     });
 
     it("should find a child node through another child", async function () {
-        const found = await rootNode.findNode(childNode2.address);
+        const { rootNode, childNode2 } = await loadFixture(deployFixture);
+        const found = await rootNode.findNode(childNode2);
         expect(found).to.be.true;
     });
 
     it("should not find a non-existing node", async function () {
-        const fakeAddress = ethers.constants.AddressZero;
+        const { rootNode } = await loadFixture(deployFixture);
+        const fakeAddress = ethers.ZeroAddress;
         const found = await rootNode.findNode(fakeAddress);
         expect(found).to.be.false;
     });
-
-    //   it("should find a child node from a deeper level", async function () {
-    //     // Deploy grandchild
-    //     const grandChildNode = await ChildNode.deploy(childNode1.address, ["Grandchild Attr"]);
-    //     await childNode1.addChild(grandChildNode.address);
-
-    //     const found = await rootNode.findNode(grandChildNode.address);
-    //     expect(found).to.be.true;
-    //   });
 });
